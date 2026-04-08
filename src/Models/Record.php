@@ -41,4 +41,82 @@ class Record
         $stmt = $this->pdo->query('SELECT * FROM table1');
         return $stmt->fetchAll();
     }
+    /**
+     * Получает одну запись по ID
+     */
+    public function getById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM table1 WHERE id = :id AND is_deleted = 0');
+        $stmt->execute(['id' => $id]);
+        $result = $stmt->fetch();
+        return $result ?: null;
+    }
+
+    /**
+     * Вставляет новую запись
+     */
+    public function insert(array $data): bool
+    {
+        // Исключаем id и is_deleted из вставки
+        $data = array_filter($data, fn($k) => !in_array($k, ['id', 'is_deleted']), ARRAY_FILTER_USE_KEY);
+        
+        $columns = implode(', ', array_keys($data));
+        $placeholders = ':' . implode(', :', array_keys($data));
+        
+        $sql = "INSERT INTO table1 ($columns) VALUES ($placeholders)";
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($data);
+    }
+
+    /**
+     * Обновляет существующую запись
+     */
+    public function update(int $id, array $data): bool
+    {
+        // Исключаем id и is_deleted из обновления
+        $data = array_filter($data, fn($k) => !in_array($k, ['id', 'is_deleted']), ARRAY_FILTER_USE_KEY);
+        
+        $setParts = [];
+        foreach (array_keys($data) as $key) {
+            $setParts[] = "$key = :$key";
+        }
+        $set = implode(', ', $setParts);
+        
+        $sql = "UPDATE table1 SET $set WHERE id = :id AND is_deleted = 0";
+        $data['id'] = $id;
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute($data);
+    }
+
+    /**
+     * Мягкое удаление (пометка is_deleted = 1)
+     */
+    public function delete(int $id): bool
+    {
+        $stmt = $this->pdo->prepare('UPDATE table1 SET is_deleted = 1 WHERE id = :id');
+        return $stmt->execute(['id' => $id]);
+    }
+
+    /**
+     * Возвращает список колонок таблицы (кроме служебных)
+     */
+    public function getFormFields(): array
+    {
+        $stmt = $this->pdo->query('DESCRIBE table1');
+        $columns = $stmt->fetchAll();
+        
+        $fields = [];
+        foreach ($columns as $col) {
+            if (!in_array($col['Field'], ['id', 'is_deleted', 'created_at', 'updated_at'])) {
+                $fields[] = [
+                    'name' => $col['Field'],
+                    'type' => $col['Type'],
+                    'null' => $col['Null'],
+                    'default' => $col['Default']
+                ];
+            }
+        }
+        return $fields;
+    }
 }
+
